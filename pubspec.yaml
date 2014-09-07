@@ -1,11 +1,12 @@
-name: taggables
-version: 0.1.1
+name: cloudy
+version: 0.0.1
 author: Alexander Adeniyin Ewetumo <trinoxf@gmail.com>
-homepage: http://github.com/influx6/taggables.dart
-description: a derivative implementation of x-tag components in dart with a few differences
+homepage: http://github.com/influx6/cloudy.dart
+description: providing client-side components that speed off development project
 dependencies:
     browser: any
     hub: any
     bass: any
+    taggables: any
     streamable: any
     requestful: any

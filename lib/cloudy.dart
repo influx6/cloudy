@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:bass/bass.dart';
 import 'package:hub/hub.dart';
 import 'package:streamable/streamable.dart';
+import 'package:dispatch/dispatch.dart';
 import 'dart:html' as html;
 
 export 'package:bass/bass.dart';
@@ -28,76 +29,87 @@ final Bind = (Function fn,[html.Element n,d]){
   return fn(rg);
 };
 
-class TagDispatcher extends Dispatch{
+class StoreDispatcher extends Dispatch{
     final MapDecorator stores = new MapDecorator<String,TagStore>();
     final MapDecorator options = MapDecorator.useMap(TagUtil.observerDefaults);
     html.Element root;
     DisplayHook display;
     ElementObservers observer;
     ElementHooks parentHook;
+    bool _attr,_nodes;
 
     static MapDecorator actions = MapDecorator.useMap({
       'added':0,
       'removed':1,
-      'attribute':2
+      'attribute':2,
+      'attributeRemoved':3
     });
 
-    static create(r,[d]) => new TagDispatcher(r,d);
+    static create(r,[d]) => new StoreDispatcher(r,d);
 
-    TagDispatcher(this.root,[DistributedObserver d]): super(){
+    StoreDispatcher(this.root,[DistributedObserver d,bool attr,bool nodes]): super(){
+
       this.display = DisplayHook.create(html.window);
       this.observer = ElementObservers.create(Valids.exist(d) ? d : DistributedObserver.create());
       this.parentHook = ElementHooks.create();
+      this._attr = Funcs.switchUnless(attr,true);
+      this._nodes = Funcs.switchUnless(nodes,true);
+      
+      if(!!this._attr){
+        this.observer.bind('attributeChange',(e){
+            if(e.target is! html.Element) return null;
+            var name = e.detail.target.tagName.toLowerCase();
+            var data = ({
+              'message':e.detail.attributeName,
+              'action': StoreDispatcher.actions.get('attribute'),
+              'node': e.target,
+              'record': e.detail,
+              'tag': name,
+            });
+            this.dispatch(data);
+        });
 
-      this.observer.bind('attributeChange',(e){
-          var name = this.root.tagName.toLowerCase();
-          var data = ({
-            'message':name,
-            'action': TagDispatcher.actions.get('attribute'),
-            'node': this.root,
-            'record': e.detail,
-            'attr':e.detail.attributeName
-          });
-          this.dispatch(data);
-      });
+        this.observer.bind('attributeRemoved',(e){
+            if(e.target is! html.Element) return null;
+            var name = e.target.tagName.toLowerCase();
+            var data = ({
+              'message':e.detail.attributeName,
+              'action': StoreDispatcher.actions.get('attributeRemoved'),
+              'node': e.target,
+              'record': e.detail,
+              'tag': name,
+            });
+            this.dispatch(data);
+        });
+      }
 
-      this.observer.bind('attributeRemoved',(e){
-          var name = this.root.tagName.toLowerCase();
-          var data = ({
-            'message':name,
-            'action': TagDispatcher.actions.get('attribute'),
-            'node': this.root,
-            'record': e.detail,
-            'attr':e.detail.attributeName
-          });
-          this.dispatch(data);
-      });
-
-      this.observer.bind('childAdded',(e){
-        var nodes = e.detail.addedNodes;
-        nodes.forEach((f){
-          if(f is! html.Element) return null;
-          var name = f.tagName;
-          this.dispatch({
-            'message':name,
-            'action': TagDispatcher.actions.get('added'),
-            'node': f,
+      if(!!this._nodes){
+        this.observer.bind('childAdded',(e){
+          var nodes = e.detail.addedNodes;
+          nodes.forEach((f){
+            if(f is! html.Element) return null;
+            var name = f.tagName;
+            this.dispatch({
+              'message':name,
+              'action': StoreDispatcher.actions.get('added'),
+              'node': f,
+            });
           });
         });
-      });
 
-      this.observer.bind('childRemoved',(e){
-        var nodes = e.detail.removedNodes;
-        nodes.forEach((f){
-          if(f is! html.Element) return null;
-          var name = f.tagName;
-          this.dispatch({
-            'message':name,
-            'action': TagDispatcher.actions.get('removed'),
-            'node': f,
+        this.observer.bind('childRemoved',(e){
+          var nodes = e.detail.removedNodes;
+          nodes.forEach((f){
+            if(f is! html.Element) return null;
+            var name = f.tagName;
+            this.dispatch({
+              'message':name,
+              'action': StoreDispatcher.actions.get('removed'),
+              'node': f,
+            });
           });
         });
-      });
+      }
 
       this.parentHook.bind('unload',(e){
         this.disable();
@@ -115,13 +127,6 @@ class TagDispatcher extends Dispatch{
       this.observer.observe(this.root,this.options.core);
       if(Valids.exist(this.root.parent)) this.parentHook.bindTo(this.root.parent);
       this.enable();
-    }
-
-    TagStore createStore(String tg){
-      if(this.stores.has(tg)) return this.stores.get(tg);
-      var store = TagStore.create(tg,this);
-      this.stores.add(tg,store);
-      return store;
     }
 
     void disable(){
@@ -155,6 +160,19 @@ class TagDispatcher extends Dispatch{
 
 }
 
+class TagDispatcher extends StoreDispatcher{
+
+    static create(e,[d,a,n]) => new TagDispatcher(e,d,a,n);
+    TagDispatcher(html.Element e,[d,attr,nodes]): super(e,d,attr,nodes);
+
+    TagStore createStore(String tg){
+      if(this.stores.has(tg)) return this.stores.get(tg);
+      var store = TagStore.create(tg,this);
+      this.stores.add(tg,store);
+      return store;
+    }
+}
+
 class TagHouse extends StoreHouse{
 
   static create(s) => new TagHouse(s);
@@ -175,6 +193,7 @@ class TagHouse extends StoreHouse{
 
     return comp.future.then((t){
         this.storehouse.add(taghash,t);
+        return t;
     });
   }
 
@@ -186,18 +205,85 @@ class TagHouse extends StoreHouse{
 
 }
 
+class AttrHouse extends StoreHouse{
+
+  static create(s) => new AttrHouse(s);
+  AttrHouse(AttrStore store): super(store);
+
+  Future<Tag> delegateAdd(html.Element tag){
+    var taghash = tag.hashCode.toString();
+    if(this.storehouse.has(taghash)) return new Future.value(this.storehouse.get(taghash));
+    return new Future((){
+        this.storehouse.add(taghash,t);
+        return t;
+    });
+  }
+
+  Future<Tag> delegateRemove(){
+    var taghash = tag.hashCode.toString();
+    if(!this.storehouse.has(taghash)) return new Future.error(new Exception('Not Found'));
+    return new Future.value(this.storehouse.destroy(taghash));
+  }
+
+}
+
+class AttrStore extends SingleStore{
+  String selector;
+  DispatchWatcher tagwatch;
+  AttrHouse house;
+
+  static create(ts,d,[t]) => new TagStore(ts,d,t);
+
+  AttrStore(this.selector,TagDispatcher dp): super(dp), tagwatch = dp.watch(tagName){
+    this.house = AttrHouse.create(this);
+    this.tagwatch = this.dispatch.watch(tagName);
+
+    this.tagwatch.listen(this.delegateRequest);
+    //tell them to send to us all related tags
+     var types = this.dispatch.root.querySelectorAll(this.selector);
+     types.forEach((f){
+      this.tagwatch.send({
+        'message':this.selector,
+        'action': StoreDispatcher.actions.get('attribute'),
+        'node': f,
+        'record':null,
+        'tag':f.tagName.toLowerCase()
+      });
+     });
+  }
+
+  void delegate(Map v){ return null; }
+
+  void delegateRequest(m){
+      var addbit = StoreDispatcher.actions.get('added');
+      var rmbit = StoreDispatcher.actions.get('removed');
+      var attr = StoreDispatcher.actions.get('attribute');
+      var attrrm = StoreDispatcher.actions.get('attributeRemoved');
+
+      if(m['action'] == attr || (m['action'] == addbit && m['node'].matches(this.selector))){
+        this.house.delegateAdd(m['node'])
+        .catchError((e){});
+      }
+
+      if(m['action'] == attrrm || (m['action'] == rmbit && m['node'].matches(this.selector))){
+        this.house.delegateRemove(m['node'])
+        .catchError((e){});
+      }
+
+  }
+}
+
 class TagStore extends SingleStore{
   String tagName;
   TagRegistry registry;
   DispatchWatcher tagwatch;
-  StoreHouse house;
+  TagHouse house;
 
   static create(ts,d,[t]) => new TagStore(ts,d,t);
 
   TagStore(String tagName,TagDispatcher dp,[TagRegistry t]): super(dp), tagwatch = dp.watch(tagName){
     this.tagName  = tagName.toLowerCase();
-    t = Funcs.switchUnless(t,TagUtil.core);
-    this.registry = t;
+    this.registry = Funcs.switchUnless(t,TagUtil.core);
     this.house = TagHouse.create(this);
     this.tagwatch = this.dispatch.watch(tagName);
 
@@ -207,7 +293,7 @@ class TagStore extends SingleStore{
      types.forEach((f){
       this.tagwatch.send({
         'message':this.tagName,
-        'action': TagDispatcher.actions.get('added'),
+        'action': StoreDispatcher.actions.get('added'),
         'node': f,
       });
      });
@@ -216,13 +302,13 @@ class TagStore extends SingleStore{
   void delegate(Map v){ return null; }
 
   void delegateRequest(m){
-      var addbit = TagDispatcher.actions.get('added');
-      var rmbit = TagDispatcher.actions.get('removed');
+      var addbit = StoreDispatcher.actions.get('added');
+      var rmbit = StoreDispatcher.actions.get('removed');
 
       if(m['action'] == addbit){
         this.house.delegateAdd(m['node'])
         .then((f){
-          f.delegateAtoms(this.house.dispatch.display);
+          f.delegateAtoms(this.dispatch.display);
         })
         .catchError((e){});
       }
@@ -288,10 +374,10 @@ class Tag extends DualObservers{
     head.insertBefore(this.style,head.firstChild);
 
     this.addAtom('myCSS',this.$.style);
-    this.addAtom('parentCSS',this.$.parent.style);
+    if(Valids.exist(this.parent))
+        this.addAtom('parentCSS',this.$.parent.style);
+    else this.addAtom('parentCSS',null);
 
-    if(Valids.exist(this.parent)) 
-      this.atom('parentCSS').changeHandler(this.$.parent.style);
 
     //open dom update and teardown events for public use
     this.addEvent('update');
@@ -360,11 +446,16 @@ class Tag extends DualObservers{
       this.fireEvent('_teardownLive',e); 
     });
     
+    this.bind('domReady',(e){
+      if(Valids.exist(this.parent)) 
+        this.atom('parentCSS').changeHandler(this.$.parent.style);
+    });
+
     this.shadow.setInnerHtml(this.precontent.innerHtml);
   }
 
   void delegateAtoms(DisplayHook hk){
-     this.atomtimer = hk.scheduleEvery(([ms]){
+     this.atomtimer = hk.scheduleEvery(this.ms,([ms]){
        this.atomics.onAll((v,k) => k.checkAtomics());
      });
   }
@@ -374,6 +465,8 @@ class Tag extends DualObservers{
     var parentOptions = Enums.merge(this.options.core,{'subtree': false});
     this.observeRoot(this.options.core);
     this.observeParent(parent,parentOptions,n);
+    if(Valids.exist(this.parent)) 
+      this.atom('parentCSS').changeHandler(this.$.parent.style);
     this.fireEvent('beforedomReady',true);
   }
 

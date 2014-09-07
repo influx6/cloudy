@@ -9,7 +9,6 @@ void main(){
 	
 	Core.register('examples','live-header',(tag){
 
-              print('making tag');
                 tag.parentAtom.addAtomic('width',(e){
                     return e.width;
                 });
@@ -47,8 +46,8 @@ void main(){
 
 		tag.addFactory('titleUpdate',(e){
                   tag.$.query('span',(s){
-                    tag.$.data('title',(d){
-                            s.setInnerHtml(d);
+                    tag.$.data('title',null,(d){
+                      s.setInnerHtml(d.toString());
                     });
                     tag.fireEvent('update',true);
                   });
@@ -56,14 +55,12 @@ void main(){
 
 		tag.bindFactory('attributeChange','titleUpdate');
 
-                print('initing tag $tag');
                 tag.init();
 
         });
 
 
       Bind((doc){
-          print('binded body');
           doc.createStore('live-header');
           doc.init();
       });
