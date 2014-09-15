@@ -2,7 +2,7 @@ name: cloudy
 version: 0.0.1
 author: Alexander Adeniyin Ewetumo <trinoxf@gmail.com>
 homepage: http://github.com/influx6/cloudy.dart
-description: providing client-side components that speed off development project
+description: a client and server side framework built on taggables,socketful and requestful
 dependencies:
     browser: any
     hub: any
@@ -10,3 +10,6 @@ dependencies:
     taggables: any
     streamable: any
     requestful: any
+    socketful: any
+    taggables: any
+    route: any
