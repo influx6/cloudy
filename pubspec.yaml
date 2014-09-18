@@ -4,12 +4,15 @@ author: Alexander Adeniyin Ewetumo <trinoxf@gmail.com>
 homepage: http://github.com/influx6/cloudy.dart
 description: a client and server side framework built on taggables,socketful and requestful
 dependencies:
-    browser: any
-    hub: any
-    bass: any
-    taggables: any
-    streamable: any
-    requestful: any
-    socketful: any
-    taggables: any
-    route: any
+  route: any
+  browser: any
+  hub: any
+  bass: any
+  taggables: any
+  streamable: any
+  requestful: any
+  socketful: any
+  taggables: any
+# dependency_overrides:
+#   hub:
+#     path: ../hub
