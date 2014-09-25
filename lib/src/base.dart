@@ -1,5 +1,6 @@
 part of cloudy;
 
+
 abstract class HistoryNotifier{
   final Distributor delegate = Distributor.create('new-notifies');
   final Distributor notFound = Distributor.create('new-notifies');
@@ -151,17 +152,47 @@ class CloudyPages{
   static final String PAGE_ADDED = Hub.randomString(2,4);
   static final String PAGE_REMOVED = Hub.randomString(2,4);
 
-  static Future createPagesWith(CloudyHistoryNotifier hc,[f]){
+  static Future createPagesWith(CloudyHistoryNotifier hc,[AtomicMap f]){
     return new Future.sync((){
       return new _CloudyPages.withNotifier(CloudyHistory.create(hc),f);
     });
   }
 
-  static Future createPages([n,f]){
+  static Future createPages([n,AtomicMap f]){
     return new Future.sync((){
       return new _CloudyPages(CloudyHistory.create(CloudyHistoryNotifier.create(n)),f);
     });
   }
+}
+
+class CloudyBag{
+  final Events events = Events.create();
+  final _CloudyPages page;
+  final dynamic root;
+  final dynamic box;
+
+  static create(b,p,r) => new CloudyBag(b,p,r);
+  CloudyBag(this.box,this.page,this.root);
+
+  Function get cloudy => this.page.cloudy;
+  Function get watch => this.events.createEvent;
+  Function get unwatch => this.events.createEvent; 
+  Function get on => this.events.on;
+  Function get once => this.events.once;
+  Function get off => this.events.off;
+  Function get offOnce => this.events.offOnce;
+  Function get emit => this.events.fireEvent;
+
+  void onCloudy(String name,Function n){
+    this.watch(name);
+    this.on(name,(t){
+        this.cloudy(name,t.$.attr('route'),(page){
+            return n(page,t);
+        });
+    });
+  }
+
+  void init() => this.box.init();
 }
 
 class _CloudyPages extends Dispatch{
@@ -172,9 +203,10 @@ class _CloudyPages extends Dispatch{
   Locker lock;
 
 
-  factory _CloudyPages.withNotifier(CloudyHistoryNotifier n){
-    return new CloudyPages(CloudyHistory.create(n));
+  factory _CloudyPages.withNotifier(CloudyHistoryNotifier n,[AtomicMap m]){
+    return new _CloudyPages(CloudyHistory.create(n),m);
   }
+
 
   _CloudyPages(this.history,[this.pagesRegistry]){
     this.blocks = sm.Streamable.create();
@@ -226,20 +258,23 @@ class _CloudyPages extends Dispatch{
   void flushCodes() => this.blocks.forceFlush();
   void sendCode(n) => this.blocks.emit(n);
 
-  CloudyPage cloudy(String exid,String path,Function fnpage){
+  CloudyPage cloudy(String exid,String path,[Function fnpage]){
     if(this.hasPage(exid)) return this.getPage(exid);
 
     if(Valids.exist(this.pagesRegistry)){
-      this.pagesRegistry.add(exid,{
-        'path':path,
-        'effector': fnpage
-      });
+      if(!this.pagesRegistry.has(exid)){
+        this.pagesRegistry.add(exid,{
+          'path':path,
+          'effector': fnpage
+        });
+      }
     }
-  
+    
+    var conf = this.pagesRegistry.get(exid);
     var page = CloudyPage.create(exid,path,this);
     this.history.push(exid,path);
     this.pages.add(exid,page);
-    fnpage(page);
+    conf['effector'](page);
     return page;
   }
 
@@ -333,3 +368,5 @@ class CloudyPage extends Dispatch{
  void forceUnlock() => this.lock.unlock();
 
 }
+
+

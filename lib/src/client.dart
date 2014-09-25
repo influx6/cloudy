@@ -55,3 +55,4 @@ class CloudyHistoryNotifier extends HistoryNotifier{
   }
 
 }
+

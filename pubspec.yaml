@@ -14,5 +14,9 @@ dependencies:
   socketful: any
   taggables: any
 # dependency_overrides:
+#   bass:
+#     path: ../bass
+#   taggables:
+#     path: ../taggables
 #   hub:
 #     path: ../hub
